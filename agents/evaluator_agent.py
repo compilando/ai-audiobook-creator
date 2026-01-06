@@ -40,17 +40,11 @@ class EvaluatorAgent:
         quality_threshold = state.get("quality_threshold", 70.0)
         iteration_count = state.get("iteration_count", 0)
         
-        logger.agent_start("Evaluator", f"Evaluando contenido generado (Iteración {iteration_count + 1})")
-        logger.info(f"Umbral de calidad: {quality_threshold}/100")
+        logger.agent_start("Evaluator", f"Evaluando contenido (Iteración {iteration_count + 1})")
         
         if not content_v1 and not content_v2:
             logger.error("No hay contenido para evaluar")
             raise ValueError("No hay contenido para evaluar.")
-        
-        # Contar contenido disponible
-        v1_chapters = len(content_v1) if content_v1 else 0
-        v2_chapters = len(content_v2) if content_v2 else 0
-        logger.info(f"Contenido a evaluar: Generator-1: {v1_chapters} capítulos, Generator-2: {v2_chapters} capítulos")
         
         # Obtener prompts según el idioma
         system_prompt = LanguageSupport.get_system_prompt(language, "evaluator")
@@ -59,8 +53,6 @@ class EvaluatorAgent:
             content_v2=content_v2,
             language=language,
         )
-        
-        logger.debug("Enviando contenido al LLM para evaluación...")
         
         # Generar evaluación usando el LLM
         response = self.llm_client.generate(
@@ -111,6 +103,16 @@ class EvaluatorAgent:
         
         if decision == "improve" and evaluation.get("improvement_instructions"):
             logger.info(f"Instrucciones de mejora: {evaluation.get('improvement_instructions', '')[:200]}...")
+        
+        # Enviar evaluación completa para streaming a Gradio
+        if hasattr(logger, 'evaluation_result'):
+            logger.evaluation_result(
+                score=overall_score,
+                decision=decision_color,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                feedback=evaluation.get("improvement_instructions", ""),
+            )
         
         logger.agent_complete("Evaluator", f"Puntuación: {overall_score}/100 - {decision_color}")
         

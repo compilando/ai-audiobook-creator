@@ -10,7 +10,7 @@ import sys
 import time
 import logging
 from datetime import datetime
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Callable, List
 from enum import Enum
 
 
@@ -412,15 +412,204 @@ class RichLogger:
             print()
 
 
+class StreamingRichLogger(RichLogger):
+    """
+    Logger que extiende RichLogger con capacidad de streaming a callbacks.
+    
+    Permite capturar logs y enviarlos a Gradio u otros sistemas en tiempo real.
+    """
+    
+    def __init__(
+        self,
+        name: str = "audiobook",
+        level: str = "INFO",
+        show_timestamp: bool = True,
+        show_elapsed: bool = True,
+        use_colors: bool = True,
+    ):
+        super().__init__(name, level, show_timestamp, show_elapsed, use_colors)
+    
+    def _log(self, level: LogLevel, message: str, **kwargs):
+        """Override del log para notificar callbacks."""
+        # Llamar al log original
+        super()._log(level, message, **kwargs)
+        
+        # Crear entrada de log estructurada
+        level_name, _, emoji = level.value
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": level_name,
+            "emoji": emoji,
+            "message": message,
+            "extra": kwargs,
+            "type": "log",
+        }
+        
+        # Notificar a callbacks
+        _notify_callbacks(log_entry)
+    
+    def prompt(self, agent: str, prompt_text: str, system_prompt: Optional[str] = None):
+        """Log de un prompt completo enviado al LLM."""
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": "PROMPT",
+            "emoji": "📝",
+            "message": f"Prompt de {agent}",
+            "type": "prompt",
+            "agent": agent,
+            "prompt": prompt_text,
+            "system_prompt": system_prompt,
+        }
+        
+        # Log resumido a consola
+        preview = prompt_text[:100].replace("\n", " ") + "..." if len(prompt_text) > 100 else prompt_text.replace("\n", " ")
+        self._log(LogLevel.LLM, f"📝 Prompt [{agent}]: {preview}")
+        
+        # Notificar con el prompt completo
+        _notify_callbacks(log_entry)
+    
+    def response(self, agent: str, response_text: str, tokens: Optional[int] = None):
+        """Log de una respuesta completa del LLM."""
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": "RESPONSE",
+            "emoji": "💬",
+            "message": f"Respuesta de {agent}",
+            "type": "response",
+            "agent": agent,
+            "response": response_text,
+            "tokens": tokens,
+            "word_count": len(response_text.split()) if response_text else 0,
+        }
+        
+        # Log resumido a consola
+        preview = response_text[:100].replace("\n", " ") + "..." if len(response_text) > 100 else response_text.replace("\n", " ")
+        self._log(LogLevel.LLM, f"💬 Respuesta [{agent}]: {preview}")
+        
+        # Notificar con la respuesta completa
+        _notify_callbacks(log_entry)
+    
+    def content_generated(self, chapter: int, title: str, content: str, agent_id: str):
+        """Log de contenido de capítulo generado."""
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": "CONTENT",
+            "emoji": "📖",
+            "message": f"Capítulo {chapter}: {title}",
+            "type": "content",
+            "chapter_number": chapter,
+            "chapter_title": title,
+            "content": content,
+            "word_count": len(content.split()) if content else 0,
+            "agent_id": agent_id,
+        }
+        
+        # Notificar
+        _notify_callbacks(log_entry)
+    
+    def evaluation_result(
+        self,
+        score: int,
+        decision: str,
+        strengths: List[str],
+        weaknesses: List[str],
+        feedback: Optional[str] = None,
+    ):
+        """Log del resultado de evaluación."""
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": "EVALUATION",
+            "emoji": "🔍",
+            "message": f"Evaluación: {score}/100 - {decision}",
+            "type": "evaluation",
+            "score": score,
+            "decision": decision,
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "feedback": feedback,
+        }
+        
+        # Notificar
+        _notify_callbacks(log_entry)
+    
+    def plan_generated(self, plan: Dict[str, Any]):
+        """Log del plan generado."""
+        log_entry = {
+            "timestamp": self._format_time(),
+            "elapsed": self._format_elapsed(),
+            "level": "PLAN",
+            "emoji": "📋",
+            "message": "Plan de contenido generado",
+            "type": "plan",
+            "plan": plan,
+        }
+        
+        # Notificar
+        _notify_callbacks(log_entry)
+
+
+# Callback type para streaming de logs
+LogCallback = Callable[[Dict[str, Any]], None]
+
 # Logger global singleton
-_logger: Optional[RichLogger] = None
+_logger: Optional[StreamingRichLogger] = None
+_log_buffer: List[Dict[str, Any]] = []
+_log_callbacks: List[LogCallback] = []
+
+
+def add_log_callback(callback: LogCallback):
+    """Agrega un callback para recibir logs en tiempo real."""
+    global _log_callbacks
+    if callback not in _log_callbacks:
+        _log_callbacks.append(callback)
+
+
+def remove_log_callback(callback: LogCallback):
+    """Elimina un callback de logs."""
+    global _log_callbacks
+    if callback in _log_callbacks:
+        _log_callbacks.remove(callback)
+
+
+def clear_log_callbacks():
+    """Limpia todos los callbacks de logs."""
+    global _log_callbacks
+    _log_callbacks = []
+
+
+def get_log_buffer() -> list:
+    """Obtiene el buffer de logs acumulados."""
+    global _log_buffer
+    return _log_buffer.copy()
+
+
+def clear_log_buffer():
+    """Limpia el buffer de logs."""
+    global _log_buffer
+    _log_buffer = []
+
+
+def _notify_callbacks(log_entry: dict):
+    """Notifica a todos los callbacks sobre un nuevo log."""
+    global _log_callbacks, _log_buffer
+    _log_buffer.append(log_entry)
+    for callback in _log_callbacks:
+        try:
+            callback(log_entry)
+        except Exception:
+            pass  # Ignorar errores en callbacks
 
 
 def get_logger(
     name: str = "audiobook",
     level: Optional[str] = None,
     force_new: bool = False,
-) -> RichLogger:
+) -> StreamingRichLogger:
     """
     Obtiene el logger singleton o crea uno nuevo.
     
@@ -430,13 +619,13 @@ def get_logger(
         force_new: Forzar creación de nuevo logger
         
     Returns:
-        Instancia del RichLogger
+        Instancia del StreamingRichLogger
     """
     global _logger
     
     if _logger is None or force_new:
         log_level = level or os.environ.get("LOG_LEVEL", "INFO")
-        _logger = RichLogger(
+        _logger = StreamingRichLogger(
             name=name,
             level=log_level,
             use_colors=True,
@@ -445,7 +634,7 @@ def get_logger(
     return _logger
 
 
-def setup_logging(level: str = "INFO") -> RichLogger:
+def setup_logging(level: str = "INFO") -> StreamingRichLogger:
     """
     Configura el sistema de logging.
     

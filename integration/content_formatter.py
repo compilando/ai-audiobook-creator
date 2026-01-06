@@ -13,6 +13,7 @@ class ContentFormatter:
     def format_to_audiobook_text(
         content: List[Dict[str, Any]],
         output_path: str = "converted_book.txt",
+        language: str = "es",
     ) -> str:
         """
         Formatea el contenido generado al formato de texto plano para audiobook.
@@ -20,10 +21,14 @@ class ContentFormatter:
         Args:
             content: Lista de capítulos con contenido
             output_path: Ruta donde guardar el archivo formateado
+            language: Código de idioma ("es" para español, "en" para inglés)
             
         Returns:
             Ruta del archivo generado
         """
+        # Determinar el prefijo de capítulo según el idioma
+        chapter_prefix = "Capítulo" if language == "es" else "Chapter"
+        
         formatted_lines = []
         
         for chapter in sorted(content, key=lambda x: x.get("chapter_number", 0)):
@@ -31,20 +36,22 @@ class ContentFormatter:
             chapter_title = chapter.get("chapter_title", "")
             chapter_content = chapter.get("content", "")
             
-            # Agregar título del capítulo
-            formatted_lines.append(f"Chapter {chapter_num}")
-            formatted_lines.append(chapter_title)
+            # Agregar título del capítulo en el idioma correcto
+            formatted_lines.append(f"{chapter_prefix} {chapter_num}")
+            if chapter_title:
+                formatted_lines.append(chapter_title)
             formatted_lines.append("")  # Línea en blanco
             
             # Agregar contenido del capítulo
             # Dividir en párrafos y líneas
-            paragraphs = chapter_content.split("\n\n")
-            for paragraph in paragraphs:
-                if paragraph.strip():
-                    # Dividir párrafos largos en líneas más cortas para mejor TTS
-                    lines = ContentFormatter._split_paragraph_for_tts(paragraph)
-                    formatted_lines.extend(lines)
-                    formatted_lines.append("")  # Línea en blanco entre párrafos
+            if chapter_content:
+                paragraphs = chapter_content.split("\n\n")
+                for paragraph in paragraphs:
+                    if paragraph.strip():
+                        # Dividir párrafos largos en líneas más cortas para mejor TTS
+                        lines = ContentFormatter._split_paragraph_for_tts(paragraph)
+                        formatted_lines.extend(lines)
+                        formatted_lines.append("")  # Línea en blanco entre párrafos
         
         # Escribir al archivo
         formatted_text = "\n".join(formatted_lines)

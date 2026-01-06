@@ -31,7 +31,7 @@ class LLMClient:
             api_key: Clave API (por defecto desde env)
             model_name: Nombre del modelo (por defecto desde env)
             temperature: Temperatura para generación
-            max_tokens: Máximo de tokens a generar
+            max_tokens: Máximo de tokens a generar (default 4096)
         """
         self.base_url = base_url or os.environ.get(
             "LLM_BASE_URL", "http://localhost:11434/v1"
@@ -43,7 +43,8 @@ class LLMClient:
             "LLM_MODEL_NAME", "qwen2.5:7b"
         )
         self.temperature = temperature
-        self.max_tokens = max_tokens
+        # Establecer max_tokens por defecto desde env o 4096
+        self.max_tokens = max_tokens or int(os.environ.get("LLM_MAX_TOKENS", "4096"))
         
         # Cliente síncrono
         self.client = OpenAI(
@@ -96,6 +97,10 @@ class LLMClient:
         
         logger.llm_request(self.model_name, prompt, tokens_estimate)
         
+        # Capturar prompt completo para streaming a Gradio
+        if hasattr(logger, 'prompt'):
+            logger.prompt(self.model_name, prompt, system_prompt)
+        
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
@@ -113,6 +118,10 @@ class LLMClient:
                 tokens_used = response.usage.total_tokens
             
             logger.llm_response(self.model_name, result, tokens_used)
+            
+            # Capturar respuesta completa para streaming a Gradio
+            if hasattr(logger, 'response'):
+                logger.response(self.model_name, result, tokens_used)
             
             return result
         except Exception as e:
@@ -150,6 +159,10 @@ class LLMClient:
         
         logger.llm_request(self.model_name, prompt, tokens_estimate)
         
+        # Capturar prompt completo para streaming a Gradio
+        if hasattr(logger, 'prompt'):
+            logger.prompt(self.model_name, prompt, system_prompt)
+        
         try:
             response = await self.async_client.chat.completions.create(
                 model=self.model_name,
@@ -167,6 +180,10 @@ class LLMClient:
                 tokens_used = response.usage.total_tokens
             
             logger.llm_response(self.model_name, result, tokens_used)
+            
+            # Capturar respuesta completa para streaming a Gradio
+            if hasattr(logger, 'response'):
+                logger.response(self.model_name, result, tokens_used)
             
             return result
         except Exception as e:

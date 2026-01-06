@@ -11,6 +11,7 @@ class ContentGenerationState(TypedDict):
     # Input inicial
     topic: str
     language: str
+    size: str  # Tamaño del audiobook: "short", "medium", "long"
     
     # Plan generado por el planificador
     plan: Optional[Dict[str, Any]]

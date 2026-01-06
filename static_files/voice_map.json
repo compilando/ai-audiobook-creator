@@ -29,6 +29,80 @@
             "8": "af_aoede+af_heart",
             "9": "af_sarah",
             "10": "af_bella"
+        },
+        "voices_by_language": {
+            "es": {
+                "voices": [
+                    {
+                        "id": "em_alex",
+                        "name": "Alex (Masculino ES)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "em_santa",
+                        "name": "Santa (Masculino ES)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "ef_dora",
+                        "name": "Dora (Femenino ES)",
+                        "gender": "female"
+                    }
+                ],
+                "default_male": "em_alex",
+                "default_female": "ef_dora"
+            },
+            "en": {
+                "voices": [
+                    {
+                        "id": "am_puck",
+                        "name": "Puck (Male EN)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "am_onyx",
+                        "name": "Onyx (Male EN)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "am_michael",
+                        "name": "Michael (Male EN)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "am_echo",
+                        "name": "Echo (Male EN)",
+                        "gender": "male"
+                    },
+                    {
+                        "id": "af_heart",
+                        "name": "Heart (Female EN)",
+                        "gender": "female"
+                    },
+                    {
+                        "id": "af_bella",
+                        "name": "Bella (Female EN)",
+                        "gender": "female"
+                    },
+                    {
+                        "id": "af_sky",
+                        "name": "Sky (Female EN)",
+                        "gender": "female"
+                    },
+                    {
+                        "id": "af_sarah",
+                        "name": "Sarah (Female EN)",
+                        "gender": "female"
+                    },
+                    {
+                        "id": "af_alloy",
+                        "name": "Alloy (Female EN)",
+                        "gender": "female"
+                    }
+                ],
+                "default_male": "am_puck",
+                "default_female": "af_heart"
+            }
         }
     },
     "orpheus": {

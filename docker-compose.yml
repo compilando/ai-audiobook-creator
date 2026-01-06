@@ -15,14 +15,14 @@ services:
       - OLLAMA_KEEP_ALIVE=24h
     volumes:
       - ollama_models:/root/.ollama
-    # GPU support - uncomment if NVIDIA Container Toolkit is installed
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    # GPU support - enabled for NVIDIA RTX 3070
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - ai_audiobook_network
@@ -34,26 +34,24 @@ services:
       start_period: 60s
 
   # ============================================
-  # Servicio TTS - Kokoro (CPU)
-  # Para GPU, cambiar a: ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.1
-  # y descomentar la sección deploy
+  # Servicio TTS - Kokoro (GPU)
   # ============================================
   kokoro_tts:
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.1
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.1
     container_name: ai_audiobook_kokoro
     ports:
       - "8880:8880"
     environment:
-      - TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE=2
+      - TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE=4
     command: uvicorn api.src.main:app --host 0.0.0.0 --port 8880 --log-level info --workers 2
-    # GPU support - uncomment if using GPU image and NVIDIA Container Toolkit is installed
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    # GPU support - enabled for NVIDIA RTX 3070
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - ai_audiobook_network

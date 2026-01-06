@@ -110,6 +110,64 @@ async def generate_audio_with_retry(
     raise Exception(f"Fallo al generar audio después de {max_retries + 1} intentos. Último error: {last_exception}")
 
 
+# Tamaño del header WAV estándar
+WAV_HEADER_SIZE = 44
+
+
+def strip_wav_header(audio_data: bytearray) -> bytearray:
+    """
+    Elimina el header WAV de los datos de audio.
+    
+    Args:
+        audio_data: Datos de audio WAV completos
+        
+    Returns:
+        Datos de audio sin el header (solo PCM)
+    """
+    if len(audio_data) > WAV_HEADER_SIZE:
+        return audio_data[WAV_HEADER_SIZE:]
+    return audio_data
+
+
+def create_wav_header(data_size: int, sample_rate: int = 24000, channels: int = 1, bits_per_sample: int = 16) -> bytes:
+    """
+    Crea un header WAV válido para los datos PCM.
+    
+    Args:
+        data_size: Tamaño de los datos de audio en bytes
+        sample_rate: Frecuencia de muestreo (default 24000 Hz para Kokoro)
+        channels: Número de canales (1 = mono)
+        bits_per_sample: Bits por muestra (16 bits)
+        
+    Returns:
+        Header WAV de 44 bytes
+    """
+    import struct
+    
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    
+    header = bytearray()
+    # RIFF header
+    header.extend(b'RIFF')
+    header.extend(struct.pack('<I', 36 + data_size))  # File size - 8
+    header.extend(b'WAVE')
+    # fmt chunk
+    header.extend(b'fmt ')
+    header.extend(struct.pack('<I', 16))  # Chunk size
+    header.extend(struct.pack('<H', 1))   # Audio format (1 = PCM)
+    header.extend(struct.pack('<H', channels))
+    header.extend(struct.pack('<I', sample_rate))
+    header.extend(struct.pack('<I', byte_rate))
+    header.extend(struct.pack('<H', block_align))
+    header.extend(struct.pack('<H', bits_per_sample))
+    # data chunk
+    header.extend(b'data')
+    header.extend(struct.pack('<I', data_size))
+    
+    return bytes(header)
+
+
 async def generate_line_audio_with_voices(
     client: AsyncOpenAI,
     tts_model: str,
@@ -123,7 +181,7 @@ async def generate_line_audio_with_voices(
     
     Esta función divide la línea en partes de diálogo y narración,
     genera audio para cada parte con la voz correspondiente,
-    y las combina en un solo buffer de audio.
+    y las combina en un solo buffer de audio SIN clics.
     
     Args:
         client: Cliente AsyncOpenAI
@@ -134,7 +192,7 @@ async def generate_line_audio_with_voices(
         max_retries: Número máximo de reintentos
         
     Returns:
-        bytearray: Buffer de audio combinado, o None si la línea está vacía/solo puntuación
+        bytearray: Buffer de audio combinado con header WAV válido, o None si la línea está vacía
     """
     if not line or is_only_punctuation(line):
         return None
@@ -142,8 +200,9 @@ async def generate_line_audio_with_voices(
     # Dividir la línea en partes anotadas
     annotated_parts = split_and_annotate_text(line)
     
-    # Buffer combinado para toda la línea
-    combined_buffer = bytearray()
+    # Lista para almacenar los datos PCM sin headers
+    pcm_segments = []
+    first_header = None
     
     for part in annotated_parts:
         text_to_speak = part["text"].strip()
@@ -167,17 +226,34 @@ async def generate_line_audio_with_voices(
                 max_retries
             )
             
-            combined_buffer.extend(audio_buffer)
+            # Guardar el primer header para reutilizarlo
+            if first_header is None and len(audio_buffer) > WAV_HEADER_SIZE:
+                first_header = bytes(audio_buffer[:WAV_HEADER_SIZE])
+            
+            # Extraer solo los datos PCM (sin header)
+            pcm_data = strip_wav_header(audio_buffer)
+            pcm_segments.append(pcm_data)
             
         except Exception as e:
             print(f"Advertencia: Fallo al generar audio para texto: '{text_to_speak[:50]}...' - Error: {str(e)}")
-            # Continuar con la siguiente parte
             continue
     
-    if len(combined_buffer) == 0:
+    if not pcm_segments:
         return None
     
-    return combined_buffer
+    # Combinar todos los segmentos PCM
+    combined_pcm = bytearray()
+    for segment in pcm_segments:
+        combined_pcm.extend(segment)
+    
+    # Crear un nuevo header WAV con el tamaño correcto
+    new_header = create_wav_header(len(combined_pcm))
+    
+    # Combinar header + datos PCM
+    result = bytearray(new_header)
+    result.extend(combined_pcm)
+    
+    return result
 
 
 def check_if_chapter_heading(text: str) -> bool:

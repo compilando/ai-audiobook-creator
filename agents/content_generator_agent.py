@@ -49,9 +49,6 @@ class ContentGeneratorAgent:
         
         logger.agent_start(agent_display, f"Generando contenido para {len(plan.get('chapters', []))} capítulo(s)")
         
-        if iteration_count > 0:
-            logger.info(f"Iteración {iteration_count + 1} - Aplicando feedback previo")
-        
         # Obtener prompts según el idioma
         system_prompt = LanguageSupport.get_system_prompt(language, "generator")
         
@@ -59,7 +56,6 @@ class ContentGeneratorAgent:
         if feedback_history and iteration_count > 0:
             latest_feedback = feedback_history[-1]
             system_prompt += f"\n\nFeedback de la iteración anterior:\n{latest_feedback.get('improvement_instructions', '')}"
-            logger.debug(f"Feedback aplicado: {latest_feedback.get('improvement_instructions', '')[:100]}...")
         
         # Generar contenido para cada capítulo
         chapters = plan.get("chapters", [])
@@ -130,9 +126,11 @@ class ContentGeneratorAgent:
         topics = chapter.get("topics", [])
         estimated_length = chapter.get("estimated_length", 1000)
         
-        # Construir prompt del usuario
-        if language == Language.SPANISH:
-            user_prompt = f"""Escribe el contenido completo del Capítulo {chapter_num}: {chapter_title}
+        # Construir prompt del usuario según el idioma
+        if language == "es" or language == Language.SPANISH:
+            user_prompt = f"""[IDIOMA: ESPAÑOL - Escribe TODO en español]
+
+Escribe el contenido completo del Capítulo {chapter_num}: {chapter_title}
 
 Tema principal del audiobook: {topic}
 
@@ -141,16 +139,21 @@ Temas a cubrir en este capítulo:
 
 Longitud estimada: aproximadamente {estimated_length} palabras
 
-El contenido debe ser:
+Requisitos del contenido:
+- Escrito completamente en ESPAÑOL
 - Claro y fácil de entender cuando se escucha
 - Bien estructurado con párrafos cortos
 - Incluir ejemplos prácticos cuando sea apropiado
 - Apropiado para formato audiobook (evitar referencias visuales)
 - Progresivo y lógico
+- NO uses "Chapter", usa "Capítulo"
+- NO escribas en inglés
 
-Escribe el contenido completo del capítulo:"""
+Escribe el contenido completo del capítulo EN ESPAÑOL:"""
         else:  # English
-            user_prompt = f"""Write the complete content for Chapter {chapter_num}: {chapter_title}
+            user_prompt = f"""[LANGUAGE: ENGLISH - Write everything in English]
+
+Write the complete content for Chapter {chapter_num}: {chapter_title}
 
 Main topic of the audiobook: {topic}
 

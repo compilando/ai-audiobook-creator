@@ -80,6 +80,8 @@ class AudiobookAdapter:
         narrator_gender: str = "female",
         language: str = "es",
         add_emotion_tags: bool = False,
+        voice_id: Optional[str] = None,
+        output_filename: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Genera un audiobook a partir del archivo de texto formateado.
@@ -91,6 +93,8 @@ class AudiobookAdapter:
             narrator_gender: Género del narrador ("male" o "female")
             language: Idioma del contenido
             add_emotion_tags: Si se deben agregar etiquetas de emoción
+            voice_id: ID específico de la voz a usar (ej: "em_alex", "ef_dora")
+            output_filename: Nombre del archivo de salida (sin extensión)
             
         Yields:
             Actualizaciones de progreso
@@ -118,10 +122,10 @@ class AudiobookAdapter:
         word_count = len(text.split())
         logger.info(f"Texto cargado: {word_count} palabras ({text_length} caracteres)")
         
-        # Aplicar preprocesamiento
+        # Aplicar preprocesamiento con el idioma correcto
         logger.step("Preprocesando texto para TTS")
         yield "🔧 Preprocesando texto para TTS..."
-        text = preprocess_full_text(text)
+        text = preprocess_full_text(text, language)
         
         # Guardar el texto preprocesado
         with open("converted_book.txt", 'w', encoding='utf-8') as f:
@@ -249,13 +253,15 @@ class AudiobookAdapter:
             logger.success(f"Servicio TTS: {message}")
             yield f"✅ {message}"
             
-            # Obtener voces
-            narrator_voice, dialogue_voice = get_narrator_and_dialogue_voices(
-                self.tts_model,
-                narrator_gender
-            )
-            logger.info(f"Voces configuradas - Narrador: {narrator_voice}, Diálogo: {dialogue_voice}")
-            yield f"🎤 Voces configuradas - Narrador: {narrator_voice}, Diálogo: {dialogue_voice}"
+            # Obtener voces - usar la voz específica del idioma si está disponible
+            from utils.voice_mapping import get_default_voice_for_language
+            
+            # Usar la voz por defecto del idioma seleccionado
+            narrator_voice = get_default_voice_for_language(self.tts_model, language, narrator_gender)
+            dialogue_voice = narrator_voice  # Usar la misma voz para diálogos en modo simple
+            
+            logger.info(f"Voces configuradas para idioma '{language}' - Narrador: {narrator_voice}")
+            yield f"🎤 Voces configuradas para idioma '{language}' - Narrador: {narrator_voice}"
             
             # Dividir en líneas
             lines = [line.strip() for line in text.split('\n') if line.strip()]

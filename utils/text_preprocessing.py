@@ -242,6 +242,99 @@ def normalize_unicode_characters(text: str) -> str:
     return text
 
 
+def normalize_english_to_spanish(text: str) -> str:
+    """
+    Reemplaza palabras comunes en inglés por sus equivalentes en español.
+    
+    Útil cuando el LLM genera contenido mezclado o usa términos en inglés
+    cuando debería usar español.
+    
+    Args:
+        text: El texto a normalizar
+        
+    Returns:
+        El texto con palabras en inglés convertidas a español
+    """
+    # Diccionario de reemplazos (palabra inglés -> español)
+    # Case-insensitive replacements para encabezados
+    replacements = [
+        (r'\bChapter\s+(\d+)', r'Capítulo \1'),
+        (r'\bCHAPTER\s+(\d+)', r'CAPÍTULO \1'),
+        (r'\bPart\s+(\d+)', r'Parte \1'),
+        (r'\bPART\s+(\d+)', r'PARTE \1'),
+        (r'\bSection\s+(\d+)', r'Sección \1'),
+        (r'\bSECTION\s+(\d+)', r'SECCIÓN \1'),
+        (r'\bIntroduction\b', r'Introducción'),
+        (r'\bINTRODUCTION\b', r'INTRODUCCIÓN'),
+        (r'\bConclusion\b', r'Conclusión'),
+        (r'\bCONCLUSION\b', r'CONCLUSIÓN'),
+        (r'\bSummary\b', r'Resumen'),
+        (r'\bSUMMARY\b', r'RESUMEN'),
+        (r'\bEpilogue\b', r'Epílogo'),
+        (r'\bEPILOGUE\b', r'EPÍLOGO'),
+        (r'\bPrologue\b', r'Prólogo'),
+        (r'\bPROLOGUE\b', r'PRÓLOGO'),
+        (r'\bAppendix\b', r'Apéndice'),
+        (r'\bAPPENDIX\b', r'APÉNDICE'),
+    ]
+    
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text)
+    
+    return text
+
+
+def clean_markdown_for_tts(text: str) -> str:
+    """
+    Limpia formato markdown del texto para TTS.
+    
+    El LLM a veces genera markdown que no debe estar en el audio.
+    
+    Args:
+        text: El texto a limpiar
+        
+    Returns:
+        El texto sin formato markdown
+    """
+    # Eliminar headers markdown (##, ###, etc.)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    
+    # Eliminar negrita y cursiva
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold** -> bold
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)       # *italic* -> italic
+    text = re.sub(r'__([^_]+)__', r'\1', text)       # __bold__ -> bold
+    text = re.sub(r'_([^_]+)_', r'\1', text)         # _italic_ -> italic
+    
+    # Eliminar código inline
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    
+    # Eliminar bloques de código
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    
+    # Eliminar enlaces markdown [texto](url) -> texto
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    
+    # Eliminar imágenes markdown ![alt](url)
+    text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', '', text)
+    
+    # Eliminar listas con viñetas (convertir a prosa)
+    text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
+    
+    # Eliminar listas numeradas
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    
+    # Eliminar líneas horizontales
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    
+    # Eliminar blockquotes
+    text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+    
+    # Limpiar múltiples saltos de línea
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+
 def normalize_line_breaks(text: str) -> str:
     """
     Normaliza saltos de línea eliminando líneas vacías excesivas.
@@ -297,12 +390,13 @@ def fix_unterminated_quotes(text: str) -> str:
     return "\n".join(fixed_lines)
 
 
-def preprocess_full_text(text: str) -> str:
+def preprocess_full_text(text: str, language: str = "es") -> str:
     """
     Aplica todo el preprocesamiento necesario al texto para TTS.
     
     Args:
         text: El texto completo a preprocesar
+        language: Código de idioma ("es" o "en")
         
     Returns:
         El texto completamente preprocesado
@@ -310,13 +404,20 @@ def preprocess_full_text(text: str) -> str:
     # Paso 1: Normalizar Unicode
     text = normalize_unicode_characters(text)
     
-    # Paso 2: Normalizar saltos de línea
+    # Paso 2: Limpiar formato markdown
+    text = clean_markdown_for_tts(text)
+    
+    # Paso 3: Normalizar palabras en inglés a español (si el idioma es español)
+    if language == "es":
+        text = normalize_english_to_spanish(text)
+    
+    # Paso 4: Normalizar saltos de línea
     text = normalize_line_breaks(text)
     
-    # Paso 3: Arreglar comillas sin cerrar
+    # Paso 5: Arreglar comillas sin cerrar
     text = fix_unterminated_quotes(text)
     
-    # Paso 4: Preprocesar para TTS
+    # Paso 6: Preprocesar para TTS
     text = preprocess_text_for_tts(text)
     
     return text

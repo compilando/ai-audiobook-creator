@@ -334,3 +334,95 @@ def validate_voice(engine_name: str, voice: str) -> bool:
     """
     available = get_available_voices(engine_name)
     return voice in available.get("voices", [])
+
+
+def get_voices_for_language(engine_name: str, language: str) -> list:
+    """
+    Obtiene las voces disponibles para un idioma específico.
+    
+    Args:
+        engine_name: Nombre del motor TTS ("kokoro" o "orpheus")
+        language: Código de idioma ("es", "en")
+        
+    Returns:
+        Lista de diccionarios con información de voces
+    """
+    voice_mappings = load_voice_mappings()
+    
+    engine_name_lower = engine_name.lower()
+    
+    if engine_name_lower not in voice_mappings:
+        return []
+    
+    engine_voices = voice_mappings[engine_name_lower]
+    
+    if "voices_by_language" not in engine_voices:
+        return []
+    
+    lang_config = engine_voices["voices_by_language"].get(language, {})
+    return lang_config.get("voices", [])
+
+
+def get_default_voice_for_language(engine_name: str, language: str, gender: str = "female") -> str:
+    """
+    Obtiene la voz por defecto para un idioma y género.
+    
+    Args:
+        engine_name: Nombre del motor TTS
+        language: Código de idioma
+        gender: Género del narrador ("male" o "female")
+        
+    Returns:
+        ID de la voz por defecto
+    """
+    voice_mappings = load_voice_mappings()
+    
+    engine_name_lower = engine_name.lower()
+    
+    if engine_name_lower not in voice_mappings:
+        return "af_heart"  # Fallback
+    
+    engine_voices = voice_mappings[engine_name_lower]
+    
+    if "voices_by_language" not in engine_voices:
+        # Fallback a voces antiguas
+        if gender == "male":
+            return engine_voices.get("male_narrator", "am_puck")
+        return engine_voices.get("female_narrator", "af_heart")
+    
+    lang_config = engine_voices["voices_by_language"].get(language, {})
+    
+    if gender == "male":
+        return lang_config.get("default_male", "am_puck")
+    return lang_config.get("default_female", "af_heart")
+
+
+def get_voice_choices_for_gradio(engine_name: str, language: str) -> list:
+    """
+    Obtiene las opciones de voz formateadas para un Dropdown de Gradio.
+    
+    Args:
+        engine_name: Nombre del motor TTS
+        language: Código de idioma
+        
+    Returns:
+        Lista de tuplas (nombre_display, id_voz) para Gradio
+    """
+    voices = get_voices_for_language(engine_name, language)
+    
+    if not voices:
+        # Fallback: voces genéricas
+        if language == "es":
+            return [
+                ("Alex (Masculino ES)", "em_alex"),
+                ("Dora (Femenino ES)", "ef_dora"),
+                ("Santa (Masculino ES)", "em_santa"),
+            ]
+        else:
+            return [
+                ("Heart (Female EN)", "af_heart"),
+                ("Puck (Male EN)", "am_puck"),
+                ("Bella (Female EN)", "af_bella"),
+            ]
+    
+    return [(v["name"], v["id"]) for v in voices]

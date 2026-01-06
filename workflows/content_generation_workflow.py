@@ -150,10 +150,23 @@ def merge_node(formatter: ContentFormatter):
             state["final_content"] = merged
             
             # Log resumen del contenido fusionado
-            if merged and isinstance(merged, dict):
-                full_text = merged.get("full_text", "")
-                word_count = len(full_text.split()) if full_text else 0
-                logger.success(f"Contenido fusionado: {word_count} palabras")
+            if merged:
+                if isinstance(merged, list):
+                    # Es una lista de capítulos
+                    total_words = sum(
+                        len(ch.get("content", "").split()) 
+                        for ch in merged 
+                        if isinstance(ch, dict)
+                    )
+                    logger.success(f"Contenido fusionado: {len(merged)} capítulo(s), {total_words} palabras")
+                elif isinstance(merged, dict):
+                    full_text = merged.get("full_text", "")
+                    word_count = len(full_text.split()) if full_text else 0
+                    logger.success(f"Contenido fusionado: {word_count} palabras")
+                else:
+                    logger.success(f"Contenido fusionado: tipo {type(merged)}")
+            else:
+                logger.warning("No se generó contenido fusionado")
             
             return state
         except Exception as e:
@@ -172,8 +185,13 @@ def format_node(formatter: ContentFormatter):
         
         try:
             final_content = state.get("final_content")
+            language = state.get("language", "es")
+            
             if final_content:
-                output_path = formatter.format_to_audiobook_text(final_content)
+                output_path = formatter.format_to_audiobook_text(
+                    final_content, 
+                    language=language
+                )
                 state["metadata"] = state.get("metadata", {})
                 state["metadata"]["formatted_output_path"] = output_path
                 logger.success(f"Contenido formateado guardado en: {output_path}")
