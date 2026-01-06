@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Generated files
+generated_audiobooks/
+temp_audio/
+audio_samples/
+*.mp3
+*.wav
+*.m4b
+*.m4a
+*.aac
+*.opus
+*.flac
+
+# Project specific
+converted_book.txt
+speaker_attributed_book.jsonl
+character_gender_map.json
+tag_added_lines_chunks.txt
+cover.jpg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/

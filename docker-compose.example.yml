@@ -1,0 +1,200 @@
+version: '3.8'
+
+# Ejemplo de configuración Docker Compose para servicios LLM y TTS
+# Copia este archivo a docker-compose.yml y ajusta según tus necesidades
+
+services:
+  # ============================================
+  # Servicio LLM - Ollama (Recomendado para desarrollo)
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_audiobook_ollama
+    ports:
+      - "11434:11434"  # Puerto API de Ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h
+    volumes:
+      - ollama_models:/root/.ollama  # Persistencia de modelos
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Servicio LLM - vLLM (Alternativa para producción)
+  # ============================================
+  # Descomenta si prefieres vLLM sobre Ollama
+  # vllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: ai_audiobook_vllm
+  #   ports:
+  #     - "8000:8000"  # Puerto API OpenAI-compatible
+  #   environment:
+  #     - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+  #     - TENSOR_PARALLEL_SIZE=1
+  #   volumes:
+  #     - vllm_models:/root/.cache/huggingface/hub
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+  #   networks:
+  #     - ai_audiobook_network
+
+  # ============================================
+  # Servicio TTS - Kokoro (Recomendado para uso general)
+  # ============================================
+  kokoro_tts:
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.1
+    # Para CPU: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.1
+    container_name: ai_audiobook_kokoro
+    ports:
+      - "8880:8880"  # Puerto API TTS
+    environment:
+      - TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE=2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Servicio TTS - Orpheus (Alternativa premium)
+  # ============================================
+  # Descomenta si prefieres Orpheus sobre Kokoro
+  # Nota: Requiere setup específico del proyecto Orpheus-TTS-FastAPI
+  # orpheus_tts:
+  #   build:
+  #     context: ./orpheus-tts-fastapi  # Ruta al proyecto Orpheus
+  #     dockerfile: Dockerfile
+  #   container_name: ai_audiobook_orpheus
+  #   ports:
+  #     - "8880:8880"
+  #   environment:
+  #     - TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE=4
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+  #   networks:
+  #     - ai_audiobook_network
+
+  # ============================================
+  # Servicio Principal - AI Audiobook Creator
+  # ============================================
+  ai_audiobook_creator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_audiobook_creator
+    ports:
+      - "7860:7860"  # Puerto Gradio UI
+    env_file:
+      - .env
+    environment:
+      # Configuración LLM (ajustar según servicio usado)
+      - LLM_BASE_URL=http://ollama:11434/v1
+      # Para vLLM usar: - LLM_BASE_URL=http://vllm:8000/v1
+      
+      # Configuración TTS (ajustar según servicio usado)
+      - TTS_BASE_URL=http://kokoro_tts:8880/v1
+      # Para Orpheus usar: - TTS_BASE_URL=http://orpheus_tts:8880/v1
+      - TTS_MODEL=kokoro
+      # Para Orpheus usar: - TTS_MODEL=orpheus
+    volumes:
+      - .:/app
+      - generated_audiobooks:/app/generated_audiobooks
+      - temp_audio:/app/temp_audio
+    depends_on:
+      ollama:
+        condition: service_healthy
+      kokoro_tts:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+
+# ============================================
+# Volúmenes
+# ============================================
+volumes:
+  ollama_models:
+    driver: local
+  # vllm_models:
+  #   driver: local
+  generated_audiobooks:
+    driver: local
+  temp_audio:
+    driver: local
+
+# ============================================
+# Redes
+# ============================================
+networks:
+  ai_audiobook_network:
+    driver: bridge
+
+# ============================================
+# Instrucciones de Uso
+# ============================================
+# 
+# 1. Copia este archivo: cp docker-compose.example.yml docker-compose.yml
+# 
+# 2. Ajusta la configuración según tus necesidades:
+#    - Descomenta vLLM si lo prefieres sobre Ollama
+#    - Descomenta Orpheus si lo prefieres sobre Kokoro
+#    - Ajusta los puertos si hay conflictos
+#    - Ajusta TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE según tu VRAM
+# 
+# 3. Para Ollama, después de iniciar el servicio, descarga un modelo:
+#    docker exec -it ai_audiobook_ollama ollama pull qwen2.5:7b
+#    # O el modelo que prefieras: llama3.1, mistral, gemma, etc.
+# 
+# 4. Inicia todos los servicios:
+#    docker-compose up -d
+# 
+# 5. Verifica que todo esté funcionando:
+#    docker-compose ps
+#    docker-compose logs -f
+# 
+# 6. Accede a la UI en: http://localhost:7860
+# 
+# 7. Para detener:
+#    docker-compose down
+# 
+# Notas:
+# - Requiere Docker con soporte GPU (NVIDIA)
+# - Para CPU-only, usa las imágenes CPU de Kokoro
+# - Los modelos de Ollama se descargan automáticamente al usarlos
+# - Ajusta los recursos según tu hardware disponible

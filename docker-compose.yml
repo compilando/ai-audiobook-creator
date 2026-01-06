@@ -1,0 +1,127 @@
+# Configuración Docker Compose para AI Audiobook Creator
+# Incluye servicios LLM (Ollama) y TTS (Kokoro/Orpheus)
+
+services:
+  # ============================================
+  # Servicio LLM - Ollama
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_audiobook_ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h
+    volumes:
+      - ollama_models:/root/.ollama
+    # GPU support - uncomment if NVIDIA Container Toolkit is installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ============================================
+  # Servicio TTS - Kokoro (CPU)
+  # Para GPU, cambiar a: ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.1
+  # y descomentar la sección deploy
+  # ============================================
+  kokoro_tts:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.1
+    container_name: ai_audiobook_kokoro
+    ports:
+      - "8880:8880"
+    environment:
+      - TTS_MAX_PARALLEL_REQUESTS_BATCH_SIZE=2
+    command: uvicorn api.src.main:app --host 0.0.0.0 --port 8880 --log-level info --workers 2
+    # GPU support - uncomment if using GPU image and NVIDIA Container Toolkit is installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ============================================
+  # Servicio Principal - AI Audiobook Creator
+  # ============================================
+  ai_audiobook_creator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_audiobook_creator
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    environment:
+      # Solo sobrescribir URLs para usar nombres de contenedores Docker
+      - LLM_BASE_URL=http://ollama:11434/v1
+      - TTS_BASE_URL=http://kokoro_tts:8880/v1
+      # El resto de variables se toman del archivo .env
+    volumes:
+      - .:/app
+      - generated_audiobooks:/app/generated_audiobooks
+      - temp_audio:/app/temp_audio
+      - audio_samples:/app/audio_samples
+    depends_on:
+      ollama:
+        condition: service_healthy
+      kokoro_tts:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai_audiobook_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ============================================
+# Volúmenes
+# ============================================
+volumes:
+  ollama_models:
+    driver: local
+    name: ai_audiobook_ollama_models
+  generated_audiobooks:
+    driver: local
+    name: ai_audiobook_generated
+  temp_audio:
+    driver: local
+    name: ai_audiobook_temp_audio
+  audio_samples:
+    driver: local
+    name: ai_audiobook_audio_samples
+
+# ============================================
+# Redes
+# ============================================
+networks:
+  ai_audiobook_network:
+    driver: bridge
+    name: ai_audiobook_network
